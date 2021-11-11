@@ -83,7 +83,7 @@ This is than passed to the (awesome) [define api](https://codesandbox.io/docs/im
 
 ## Installation
 
-`yarn add gatsby-remark-embedded-codesandbox`
+`yarn add gatsby-remark-embedded-codesandbox-towavephone`
 
 ## Usage
 
@@ -94,7 +94,7 @@ This is than passed to the (awesome) [define api](https://codesandbox.io/docs/im
   options: {
     plugins: [
       {
-        resolve: 'gatsby-remark-embedded-codesandbox',
+        resolve: 'gatsby-remark-embedded-codesandbox-towavephone',
         options: {
           // Required:
 
