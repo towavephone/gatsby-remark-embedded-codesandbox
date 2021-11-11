@@ -4,6 +4,7 @@ const LZString = require('lz-string');
 const normalizePath = require('normalize-path');
 const map = require('unist-util-map');
 const queryString = require('query-string');
+const fetch = require('node-fetch');
 
 const DEFAULT_PROTOCOL = 'embedded-codesandbox://';
 const DEFAULT_EMBED_OPTIONS = {
@@ -13,21 +14,20 @@ const DEFAULT_EMBED_OPTIONS = {
 const DEFAULT_GET_IFRAME = url =>
   `<iframe src="${url}" class="embedded-codesandbox" sandbox="allow-modals allow-forms allow-popups allow-scripts allow-same-origin"></iframe>`;
 
-// Matches compression used in Babel and CodeSandbox REPLs
-// https://github.com/babel/website/blob/master/js/repl/UriUtils.js
-const compress = string =>
-  LZString.compressToBase64(string)
-    .replace(/\+/g, `-`) // Convert '+' to '-'
-    .replace(/\//g, `_`) // Convert '/' to '_'
-    .replace(/=+$/, ``); // Remove ending '='
+const DEFAULT_IGNORED_FILES = [
+  'node_modules',
+  'package-lock.json',
+  'yarn.lock'
+];
 
-module.exports = (
+module.exports = async (
   { markdownAST },
   {
     directory: rootDirectory,
     protocol = DEFAULT_PROTOCOL,
     embedOptions = DEFAULT_EMBED_OPTIONS,
     getIframe = DEFAULT_GET_IFRAME,
+    ignoredFiles = DEFAULT_IGNORED_FILES,
   }
 ) => {
   if (!rootDirectory) {
@@ -38,15 +38,35 @@ module.exports = (
     rootDirectory += '/';
   }
 
+  const ignoredFilesSet = new Set(ignoredFiles);
+
   const getDirectoryPath = url => {
     let directoryPath = url.replace(protocol, '');
     const fullPath = path.join(rootDirectory, directoryPath);
     return normalizePath(fullPath);
   };
 
+  const getFileExist = (fileList, filename = 'package.json') => {
+    const found = fileList.filter(name => name === filename);
+    return found.length > null;
+  };
+
   const getFilesList = directory => {
     let packageJsonFound = false;
-    const folderFiles = fs.readdirSync(directory);
+
+    const getAllFiles = dirPath =>
+      fs.readdirSync(dirPath).reduce((acc, file) => {
+        if (ignoredFilesSet.has(file)) return acc;
+        const relativePath = path.join(dirPath, file);
+        const isDirectory = fs.statSync(relativePath).isDirectory();
+        const additions = isDirectory
+          ? getAllFiles(relativePath)
+          : [relativePath.replace(`${directory}/`, '')];
+        return [...acc, ...additions];
+      }, []);
+
+    const folderFiles = getAllFiles(directory);
+    // console.log('folderFiles', folderFiles);
     const sandboxFiles = folderFiles
       // we ignore the package.json file as it will
       // be handled separately
@@ -65,7 +85,7 @@ module.exports = (
       // first read all files in the folder and look
       // for a package.json there
       const files = fs.readdirSync(workingDir);
-      const packageJson = getPackageJsonFile(files);
+      const packageJson = getFileExist(files);
       if (packageJson) {
         const fullFilePath = path.resolve(workingDir, 'package.json');
         const content = fs.readFileSync(fullFilePath, 'utf-8');
@@ -88,12 +108,14 @@ module.exports = (
       }
     }
 
-    return sandboxFiles;
-  };
+    if (!getFileExist(folderFiles, 'sandbox.config.json')) {
+      sandboxFiles.push({
+        name: 'sandbox.config.json',
+        content: '{ "template": "static" }',
+      });
+    }
 
-  const getPackageJsonFile = fileList => {
-    const found = fileList.filter(name => name === 'package.json');
-    return found.length > null;
+    return sandboxFiles;
   };
 
   const createParams = files => {
@@ -110,7 +132,7 @@ module.exports = (
       files: filesObj,
     };
 
-    return compress(JSON.stringify(params));
+    return JSON.stringify(params);
   };
 
   const getUrlParts = url => {
@@ -121,7 +143,7 @@ module.exports = (
     };
   };
 
-  const convertNodeToEmbedded = (node, params, options = {}) => {
+  const convertNodeToEmbedded = async (node, params, options = {}) => {
     delete node.children;
     delete node.position;
     delete node.title;
@@ -129,16 +151,29 @@ module.exports = (
 
     // merge the overriding options with the plugin one
     const mergedOptions = { ...embedOptions, ...options };
-    const encodedEmbedOptions = encodeURIComponent(
-      queryString.stringify(mergedOptions)
-    );
-    const sandboxUrl = `https://codesandbox.io/api/v1/sandboxes/define?embed=1&parameters=${params}&query=${encodedEmbedOptions}`;
-    const embedded = getIframe(sandboxUrl);
+    const encodedEmbedOptions = queryString.stringify(mergedOptions);
 
+    const { sandbox_id } = await fetch(
+      'https://codesandbox.io/api/v1/sandboxes/define?json=1',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: params,
+      }
+    ).then(x => x.json());
+
+    const sandboxUrl = `https://codesandbox.io/embed/${sandbox_id}?${encodedEmbedOptions}`;
+    const embedded = getIframe(sandboxUrl);
     node.type = 'html';
     node.value = embedded;
+
+    return node;
   };
 
+  const nodes = [];
   map(markdownAST, (node, index, parent) => {
     if (node.type === 'link' && node.url.startsWith(protocol)) {
       // split the url in base and query to allow user
@@ -149,11 +184,13 @@ module.exports = (
       const dir = getDirectoryPath(url.base);
       const files = getFilesList(dir);
       const params = createParams(files);
-      convertNodeToEmbedded(node, params, url.query);
+      const currentNode = convertNodeToEmbedded(node, params, url.query);
+      nodes.push(currentNode);
     }
-
     return node;
   });
+
+  await Promise.all(nodes);
 
   return markdownAST;
 };

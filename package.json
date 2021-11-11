@@ -21,6 +21,7 @@
   "dependencies": {
     "jest": "^23.1.0",
     "lz-string": "^1.4.4",
+    "node-fetch": "^2.6.6",
     "query-string": "^6.0.0",
     "unist-util-map": "^1.0.3"
   },
