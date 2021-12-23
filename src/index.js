@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const LZString = require('lz-string');
 const normalizePath = require('normalize-path');
 const map = require('unist-util-map');
 const queryString = require('query-string');
@@ -38,8 +37,6 @@ module.exports = async (
     rootDirectory += '/';
   }
 
-  const ignoredFilesSet = new Set(ignoredFiles);
-
   const getDirectoryPath = url => {
     let directoryPath = url.replace(protocol, '');
     const fullPath = path.join(rootDirectory, directoryPath);
@@ -65,7 +62,14 @@ module.exports = async (
         return [...acc, ...additions];
       }, []);
 
+    const files = fs.readdirSync(directory);
+    let ignoredFilesSet = new Set(ignoredFiles);
+    if (getFileExist(files, '.ignoredfiles.js')) {
+      const fullFilePath = path.resolve(directory, '.ignoredfiles.js');
+      ignoredFilesSet = new Set([...require(fullFilePath), '.ignoredfiles.js']);
+    }
     const folderFiles = getAllFiles(directory);
+
     // console.log('folderFiles', folderFiles);
     const sandboxFiles = folderFiles
       // we ignore the package.json file as it will
@@ -73,7 +77,11 @@ module.exports = async (
       .filter(file => file !== 'package.json')
       .map(file => {
         const fullFilePath = path.resolve(directory, file);
-        const content = fs.readFileSync(fullFilePath, 'utf-8');
+        let content = fs.readFileSync(fullFilePath, 'utf-8');
+        if (content.includes('gatsby-dir')) {
+          const relativeDir = directory.replace(`${process.cwd()}/static/`, 'https://blog.towavephone.com/')
+          content = content.replace(/\/gatsby-dir/g, relativeDir);
+        }
         return {
           name: file,
           content,

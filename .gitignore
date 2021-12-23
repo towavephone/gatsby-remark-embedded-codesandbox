@@ -1,7 +1,5 @@
 .DS_Store
 .vscode
 node_modules
-
+index.js
 yarn-error.log
-
-# /index.js 暂时放到仓库内，将 github 当 npm 私有库
