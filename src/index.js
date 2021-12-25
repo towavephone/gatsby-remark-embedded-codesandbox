@@ -19,6 +19,8 @@ const DEFAULT_IGNORED_FILES = [
   'yarn.lock'
 ];
 
+const DEFAULT_GATSBY_PUBLIC_DIR_REGEX = /\/GATSBY_PUBLIC_DIR/g
+
 module.exports = async (
   { markdownAST },
   {
@@ -27,6 +29,8 @@ module.exports = async (
     embedOptions = DEFAULT_EMBED_OPTIONS,
     getIframe = DEFAULT_GET_IFRAME,
     ignoredFiles = DEFAULT_IGNORED_FILES,
+    siteUrl = '',
+    gatsbyPublicDirRegex = DEFAULT_GATSBY_PUBLIC_DIR_REGEX
   }
 ) => {
   if (!rootDirectory) {
@@ -78,9 +82,9 @@ module.exports = async (
       .map(file => {
         const fullFilePath = path.resolve(directory, file);
         let content = fs.readFileSync(fullFilePath, 'utf-8');
-        if (content.includes('gatsby-dir')) {
-          const relativeDir = directory.replace(`${process.cwd()}/static/`, 'https://blog.towavephone.com/')
-          content = content.replace(/\/gatsby-dir/g, relativeDir);
+        if (gatsbyPublicDirRegex.test(content)) {
+          const relativeDir = directory.replace(`${process.cwd()}/static`, siteUrl)
+          content = content.replace(gatsbyPublicDirRegex, relativeDir);
         }
         return {
           name: file,
