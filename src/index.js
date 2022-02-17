@@ -156,32 +156,37 @@ module.exports = async (
   };
 
   const convertNodeToEmbedded = async (node, params, options = {}) => {
-    delete node.children;
-    delete node.position;
-    delete node.title;
-    delete node.url;
-
     // merge the overriding options with the plugin one
     const mergedOptions = { ...embedOptions, ...options };
     const encodedEmbedOptions = queryString.stringify(mergedOptions);
+    try {
+      const rsp = await fetch(
+        'https://codesandbox.io/api/v1/sandboxes/define?json=1',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: params,
+        }
+      ).then(x => x.json());
 
-    const { sandbox_id } = await fetch(
-      'https://codesandbox.io/api/v1/sandboxes/define?json=1',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: params,
+      if (rsp && rsp.sandbox_id) {
+        delete node.children;
+        delete node.position;
+        delete node.title;
+        delete node.url;
+    
+        const sandboxUrl = `https://codesandbox.io/embed/${rsp.sandbox_id}?${encodedEmbedOptions}`;
+        const embedded = getIframe(sandboxUrl);
+        node.type = 'html';
+        node.value = embedded;
       }
-    ).then(x => x.json());
-
-    const sandboxUrl = `https://codesandbox.io/embed/${sandbox_id}?${encodedEmbedOptions}`;
-    const embedded = getIframe(sandboxUrl);
-    node.type = 'html';
-    node.value = embedded;
-
+    } catch (error) {
+      console.log('error', error);
+      console.log('body', params);
+    }
     return node;
   };
 
