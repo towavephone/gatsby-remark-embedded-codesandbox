@@ -144,7 +144,7 @@ module.exports = async (
       files: filesObj,
     };
 
-    return JSON.stringify(params);
+    return params;
   };
 
   const getUrlParts = url => {
@@ -156,9 +156,6 @@ module.exports = async (
   };
 
   const convertNodeToEmbedded = async (node, params, options = {}) => {
-    // merge the overriding options with the plugin one
-    const mergedOptions = { ...embedOptions, ...options };
-    const encodedEmbedOptions = queryString.stringify(mergedOptions);
     try {
       const rsp = await fetch(
         'https://codesandbox.io/api/v1/sandboxes/define?json=1',
@@ -168,7 +165,7 @@ module.exports = async (
             'Content-Type': 'application/json',
             Accept: 'application/json',
           },
-          body: params,
+          body: JSON.stringify(params),
         }
       ).then(x => x.json());
 
@@ -177,7 +174,11 @@ module.exports = async (
         delete node.position;
         delete node.title;
         delete node.url;
-    
+
+        // merge the overriding options with the plugin one
+        const mergedOptions = { ...embedOptions, ...options };
+        const encodedEmbedOptions = queryString.stringify(mergedOptions);
+
         const sandboxUrl = `https://codesandbox.io/embed/${rsp.sandbox_id}?${encodedEmbedOptions}`;
         const embedded = getIframe(sandboxUrl);
         node.type = 'html';
@@ -187,6 +188,7 @@ module.exports = async (
       console.log('error', error);
       console.log('body', params);
     }
+  
     return node;
   };
 
