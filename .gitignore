@@ -1,5 +1,7 @@
 .DS_Store
 .vscode
 node_modules
-index.js
+/index.js
 yarn-error.log
+/fetch.js
+/testFetch.js

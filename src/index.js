@@ -3,7 +3,7 @@ const path = require('path');
 const normalizePath = require('normalize-path');
 const map = require('unist-util-map');
 const queryString = require('query-string');
-const fetch = require('node-fetch');
+const fetch = require('./fetch')
 
 const DEFAULT_PROTOCOL = 'embedded-codesandbox://';
 const DEFAULT_EMBED_OPTIONS = {
@@ -30,7 +30,10 @@ module.exports = async (
     getIframe = DEFAULT_GET_IFRAME,
     ignoredFiles = DEFAULT_IGNORED_FILES,
     siteUrl = '',
-    gatsbyPublicDirRegex = DEFAULT_GATSBY_PUBLIC_DIR_REGEX
+    gatsbyPublicDirRegex = DEFAULT_GATSBY_PUBLIC_DIR_REGEX,
+    maxRequestRetryCount = 3,
+    maxRequestCount = 6,
+    isLoggingRequest = true
   }
 ) => {
   if (!rootDirectory) {
@@ -166,8 +169,12 @@ module.exports = async (
             Accept: 'application/json',
           },
           body: JSON.stringify(params),
+          maxRequestRetryCount,
+          maxRequestCount,
+          isLoggingRequest,
+          nodeUrl: node.url
         }
-      ).then(x => x.json());
+      );
 
       if (rsp && rsp.sandbox_id) {
         delete node.children;
@@ -185,8 +192,8 @@ module.exports = async (
         node.value = embedded;
       }
     } catch (error) {
-      console.log('error', error);
-      console.log('body', params);
+      console.log('\nfetch error info', `${error.message.substring(0, 50)}...`, node.url);
+      // console.log('url', node.url);
     }
   
     return node;
